@@ -10,22 +10,22 @@ $memcache->addServer('localhost', 11211) or die ("Could not connect");
 
 global $proxies, $proxyPos;
 $proxies = [
-    //[],
-    [
-        CURLOPT_PROXYTYPE   => CURLPROXY_HTTP,
-        CURLOPT_PROXY       => '164.90.203.198',
-        CURLOPT_PROXYPORT   => 80
-    ],
-    [
-        CURLOPT_PROXYTYPE   => CURLPROXY_HTTP,
-        CURLOPT_PROXY       => '143.47.177.25',
-        CURLOPT_PROXYPORT   => 80
-    ],
-    [
-        CURLOPT_PROXYTYPE   => CURLPROXY_HTTP,
-        CURLOPT_PROXY       => '206.189.11.141',
-        CURLOPT_PROXYPORT   => 80
-    ],
+    [],
+    // [
+    //     CURLOPT_PROXYTYPE   => CURLPROXY_HTTP,
+    //     CURLOPT_PROXY       => '164.90.203.198',
+    //     CURLOPT_PROXYPORT   => 80
+    // ],
+    // [
+    //     CURLOPT_PROXYTYPE   => CURLPROXY_HTTP,
+    //     CURLOPT_PROXY       => '143.47.177.25',
+    //     CURLOPT_PROXYPORT   => 80
+    // ],
+    // [
+    //     CURLOPT_PROXYTYPE   => CURLPROXY_HTTP,
+    //     CURLOPT_PROXY       => '206.189.11.141',
+    //     CURLOPT_PROXYPORT   => 80
+    // ],
     // [
     //     CURLOPT_PROXYTYPE   => CURLPROXY_HTTP,
     //     CURLOPT_PROXY       => '191.101.251.3',

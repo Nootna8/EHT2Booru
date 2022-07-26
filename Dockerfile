@@ -25,4 +25,4 @@ COPY index.php /var/www/html
 COPY .htaccess /var/www/html
 COPY entrypoint.sh /entrypoint.sh
 
-CMD ["/bin/bash /entrypoint.sh"]
+entrypoint ["/entrypoint.sh"]

@@ -5,8 +5,8 @@ use PhpQuery\PhpQuery;
 use LSS\Array2XML;
 
 global $memcache;
-$memcache = new Memcache;
-$memcache->connect('localhost', 11211) or die ("Could not connect");
+$memcache = new Memcached;
+$memcache->addServer('localhost', 11211) or die ("Could not connect");
 
 global $proxies, $proxyPos;
 $proxies = [
@@ -362,7 +362,7 @@ class Gallery {
 
                 $thumb = '';
                 if(preg_match('/width:(\d+)px.+height:(\d+)px.+url\([^\)]+\/(\d+)\/\d+-(\d+)[^\)]+\) -(\d+)px/', $elm->getAttribute('style'), $out)) {
-                    $thumb = 'https://6191-86-85-131-160.eu.ngrok.io/sample_image.png?gallery=' .
+                    $thumb = getenv('BASE_URL') . '/sample_image?gallery=' .
                      $this->getGalleryId() . '&token=' . $out[3] . '&page=' . $out[4] . '&width=' . $out[1] . '&x=' . $out[5] .'&height=' . $out[2];
                 }
 
@@ -485,7 +485,7 @@ class Gallery {
 
         if($asImage) {
             $data['id'] = $this->getId();
-            $data['file_url'] = 'https://6191-86-85-131-160.eu.ngrok.io/full_banner.img?id=' . $this->galleryData->gid . '&token=' . $this->galleryData->token;
+            $data['file_url'] = getenv('BASE_URL') . '/full_banner?id=' . $this->galleryData->gid . '&token=' . $this->galleryData->token;
             $data['preview_url'] = $this->galleryData->thumbUrl;
             $data['source'] = 'https://e-hentai.org/g/' . $this->galleryData->gid . '/' . $this->galleryData->token . '/';
             $data['has_children'] = true;
@@ -738,19 +738,20 @@ function handleRequest($input) {
     return $results;
 }
 
-error_log(print_r($_SERVER, true));
+//error_log(print_r($_SERVER, true));
 
-if($_SERVER['SCRIPT_NAME'] == '/post/index.json') {
+$path = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH);
+if($path == '/post/index.json') {
     $response = handleRequest($_GET);
     echo json_encode($response);
 }
-else if($_SERVER['SCRIPT_NAME'] == '/full_banner.img') {
+else if($path== '/full_banner') {
     $gallery = Gallery::fromPage($_GET['id'], $_GET['token'], 1);
     $image = $gallery->nextImage();
     $url = $image->getPostData()['file_url'];
     header('Location: ' . $url);
 }
-else if($_SERVER['SCRIPT_NAME'] == '/sample_image.png') {
+else if($path == '/sample_image') {
     $input_url = 'https://ehgt.org/m/' . $_GET['token'] . '/' . $_GET['gallery'] . '-' . $_GET['page'] . '.jpg';
     $imageData = $memcache->get($input_url);
     if(!$imageData) {
@@ -770,7 +771,7 @@ else if($_SERVER['SCRIPT_NAME'] == '/sample_image.png') {
     imagedestroy($img_out);
 }
 else {
-    throw new Exception('Unsupported: ' . $_SERVER['REQUEST_URI']);
+    throw new Exception('Unsupported: ' . $path);
 }
 
 

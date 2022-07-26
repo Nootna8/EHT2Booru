@@ -1,0 +1,7 @@
+{
+    "require": {
+        "tcdent/php-restclient": "0.1.8.1",
+        "phpquery/phpquery": "^0.0.4",
+        "openlss/lib-array2xml": "^1.0"
+    }
+}

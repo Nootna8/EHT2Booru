@@ -1,0 +1,10 @@
+version: "3"
+services:
+  app:
+    build: .
+    volumes:
+    - ./src:/var/www/html/src
+    ports:
+      - "80:80"
+    environment:
+      - BASE_URL=https://80-nootna8-eht2booru-24v1u4uazu6.ws-eu54.gitpod.io/

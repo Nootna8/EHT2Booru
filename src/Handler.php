@@ -133,7 +133,7 @@ class Handler {
         $params = ['f_search' => implode(' ', $this->tags), 'f_cats' => $this->handleCategories()];
         
         if($this->perGallery == -1) {
-            $limit = 50;
+            $limit = $this->getParam('limit', false, 50);
             $offset = ($this->page-1) * $limit;
             $list = new LoaderImage($offset, $limit, $params);
         } else {

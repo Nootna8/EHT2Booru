@@ -24,6 +24,14 @@ class Image {
         return $imgOut[1];
     }
 
+    public function getBigUrl()
+    {
+        $this->load();
+        if(preg_match('/<a href="([^"]+)"/', $this->imageData->i7, $fullImgOut))
+            return $fullImgOut[1];
+        return null;
+    }
+
     public function getId($seperator = '#')
     {
         $id = 'image' . $seperator;
@@ -82,7 +90,7 @@ class Image {
             'height'        => $this->imageData->y,
             'source'        => 'https://e-hentai.org/s/' . $this->imageToken . '/' . $this->gallery->getGalleryId() . '-' . $this->pageNr,
             'file_size'     => $this->imageData->si,
-            'file_url'      => getenv('BASE_URL') . '/gallery_image?id=' . $this->getId(':'),
+            'file_url'      => getenv('BASE_URL') . '/image/main?id=' . $this->getId(':'),
             //'file_url'      => $fullImgOut[1] ?? $imgOut[1],
             'preview_url'   => $this->thumb == null ? $this->getFileUrl() : $this->thumb,
             //'md5'           => 'adfc1a6da575574f9cccc5c3aa33270b'

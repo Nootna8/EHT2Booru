@@ -3,9 +3,12 @@
 class Handler {
     protected static $methods = [
         '/post/index.json'  => 'handlePosts',
-        '/full_banner'      => 'handleBanner',
-        '/sample_image'     => 'handleSample',
-        '/gallery_image'    => 'handleGalleryImage'
+        '/gallery/banner'   => 'handleBanner',
+        '/image/sample'     => 'handleSample',
+        '/image/main'       => 'handleGalleryImage',
+        '/big_image'        => 'handleBigImage',
+        '/'                 => 'loginForm',
+        '/create-key'       => 'handleCreateKey'
     ];
     protected $method;
 
@@ -14,6 +17,9 @@ class Handler {
     protected $categories;
     protected $gallery;
     protected $perGallery = 1;
+    protected $reverse = false;
+    protected $list = null;
+    protected $filters = [];
 
     public function __construct($method, $params)
     {
@@ -46,8 +52,8 @@ class Handler {
         try {
             return $this->{$this->method}();
         } catch (Exception $e) {
+            echo($e->getTraceAsString());
             error_log('Exception: ' . $e->getMessage());
-            exit;
         }
     }
 
@@ -79,15 +85,21 @@ class Handler {
             $handled = false;
 
             switch($pts[0]) {
+                case 'date':
+                    $this->filters['date'] = $pts[1];
+                    $handled = true;
+                    break;
                 case 'category':
                     $this->categories[] = $pts[1];
                     $handled = true;
                     break;
                 case 'gallery':
-                    $this->gallery = Gallery::fromPage($pts[2], $pts[1], $this->page);
+                    $this->gallery = Gallery::fromId($pts[1], $pts[2]);
                     $handled = true;
                     break;
+                case 'sort':
                 case 'order':
+                    $this->handleSort($pts[1]);
                     $handled = true;
                     break;
             }
@@ -95,6 +107,18 @@ class Handler {
             if(!$handled)
                 $this->tags[] = $t;
         }
+    }
+
+    protected function handleSort($sort)
+    {
+        if($sort == 'desc')
+            $this->reverse = true;
+
+        if($sort == 'votes')
+            $this->list = 'popular';
+
+        if($sort == 'score')
+            $this->list = 'toplist.php?tl=11';
     }
 
     protected function handleCategories()
@@ -120,24 +144,29 @@ class Handler {
     protected function handlePosts()
     {
         $this->page = $this->getParam('page', false, 1);
+        $limit = $this->getParam('limit', false, 50);
+        $offset = ($this->page-1) * $limit;
+
         $this->handleTags();
 
         if($this->gallery != null) {
-            $results = $this->gallery->getPageImages($this->page);
-            $results = array_map(function($i) { return $i->getPostData(); }, $results);
-            header("Content-type: application/json");
-            echo(json_encode($results));
-            return;
+            $list = new LoaderImageGallery($offset, $limit, $this->gallery);
+        } else {
+            $params = ['f_search' => implode(' ', $this->tags), 'f_cats' => $this->handleCategories()];
+            
+            if($this->perGallery == -1) {
+                $list = new LoaderImage($offset, $limit, $params, $this->list);
+            } else {
+                $list = new LoaderGallery($offset, $limit, $params, $this->list);
+            }
         }
 
-        $params = ['f_search' => implode(' ', $this->tags), 'f_cats' => $this->handleCategories()];
-        
-        if($this->perGallery == -1) {
-            $limit = $this->getParam('limit', false, 50);
-            $offset = ($this->page-1) * $limit;
-            $list = new LoaderImage($offset, $limit, $params);
-        } else {
-            $list = new LoaderGallery($this->page, $params);
+        if($this->reverse) {
+            $list->setReverse(true);
+        }
+
+        if(count($this->filters) > 0) {
+            $list->setFilters($this->filters);
         }
 
         header("Content-type: application/json");
@@ -157,12 +186,12 @@ class Handler {
     {
         global $memcache;
         $input_url = 'https://ehgt.org/m/' . $this->getParam('token') . '/' . $this->getParam('gallery') . '-' . $this->getParam('page') . '.jpg';
-        $imageData = $memcache->get($input_url);
-        if(!$imageData) {
-            error_log('fetch: ' . $input_url);
-            $imageData = file_get_contents($input_url);
-            $memcache->set($input_url, $imageData);
-        }
+        $imageData = getCachedVal($input_url, function() use($input_url) {
+            $ret = file_get_contents($input_url);
+            if(!$ret)
+                throw new Exception("No " . $input_url);
+            return $ret;
+        });
         $image = imagecreatefromstring($imageData);
         
         $rect = [
@@ -188,4 +217,49 @@ class Handler {
         $image = new Image($pageNr, $iToken, $gallery);
         header('Location: ' . $image->getFileUrl());
     }
+
+    protected function handleBigImage()
+    {
+        list($it, $gt, $gToken, $gId, $iToken, $pageNr) = preg_split('/[:#]/', $this->getParam('id'));
+        $gallery = Gallery::fromId($gToken, $gId);
+        $image = new Image($pageNr, $iToken, $gallery);
+
+        $url = $image->getBigUrl();
+        $url = str_replace('https', 'http', $url);
+        $client = new RestClient();
+        $resp = $client->get($url);
+        var_dump($resp);
+    }
+
+    protected function handleCreateKey()
+    {
+        $url = 'https://forums.e-hentai.org/';
+        $client = new RestClient(['base_url' => $url, 'curl_options' => getProxy()]);
+        $req = http_build_query([
+            'UserName'  => $_POST['username'],
+            'PassWord'  => $_POST['password']
+        ]);
+        $response = $client->post('index.php?act=Login&CODE=01', $req);
+        var_dump($req, $response);
+    }
+
+    protected function loginForm() { ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+</head>
+<body>
+    <form method="POST" action="/create-key">
+        <input type="text" name="username" placeholder="username"/><br/>
+        <input type="password" name="password" placeholder="***"/><br/>
+        <input type="submit" />
+    </form>    
+</body>
+</html>
+<?php }
+
 }

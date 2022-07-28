@@ -11,10 +11,18 @@ class Gallery {
     protected $lastImage = null;
     protected $loaded = false;
     protected $offset = 0;
-    
-    protected function __construct($galleryData)
+
+    public function imagePage($num)
     {
+        return 1 + floor($num / 40);
+    }
+    
+    protected function __construct($galleryData, $loaded = false)
+    {
+        if(!$galleryData)
+            throw new Exception("No data");
         $this->galleryData = $galleryData;
+        $this->loaded = $loaded;
     }
 
     public function getGalleryId()
@@ -44,6 +52,7 @@ class Gallery {
         $galleryData->token = $out[2];
         $galleryData->gid = $out[1];
 
+        $galleryData->title = $pq->xpath(".//div[@class='glink']", $row)[0]->textContent;
         $galleryData->filecount = explode(' ', $pq->query('td.gl4c div', $row)[1]->textContent)[0];
 
         $thumb = $pq->query('td.gl2c div.glthumb div img', $row);
@@ -61,39 +70,14 @@ class Gallery {
             $galleryData->tags[] = $t->getAttribute('title');
         }
 
-        return new self($galleryData);
+        return new self($galleryData, true);
     }
 
     public static function fromPage($id, $token, $page)
     {
-        $html = websiteRequest(['p' => $page-1], 'g/' . $id . '/' . $token . '/');
-        $pq=new PhpQuery;
-        $pq->load_str($html);
-
-        $galleryData = new stdClass();
-        $galleryData->token = $token;
-        $galleryData->gid = $id;
-        $galleryData->category = $pq->query('div#gdc div.cs')[0]->textContent;
-        $galleryData->tags = [];
-
-        $dataTable = $pq->query('div#gdd table tr');
-        foreach($dataTable as $elm) {
-            $cols = $pq->query('td', $elm);
-            $k = $cols[0]->textContent;
-            $v = $cols[1]->textContent;
-            if($k == 'Length:') {
-                $galleryData->filecount = intval(explode(' ', $v)[0]);
-            } else if($k == 'Posted:') {
-                $galleryData->posted_date = $v;
-            }
-        }
-
-        $tags = $pq->xpath('//div[@id=\'taglist\']//a');
-        foreach($tags as $t) {
-            $galleryData->tags[] = str_replace('ta_', '', $t->getAttribute('id'));
-        }
-        
-        return new self($galleryData);
+        $ret = self::fromId($token, $id);
+        $ret->loadFromHtml();
+        return $ret;
     }
 
     public function getId($seperator = '#')
@@ -128,9 +112,6 @@ class Gallery {
     
     public function getPageImages($num)
     {
-        //if($num > ceil($this->galleryData->filecount / 40))
-        //    return [];
-
         if(!isset($this->pagesImages[$num])) {
             $html = $this->getPageHtml($num);
             $pq=new PhpQuery;
@@ -146,7 +127,7 @@ class Gallery {
 
                 $thumb = '';
                 if(preg_match('/width:(\d+)px.+height:(\d+)px.+url\([^\)]+\/(\d+)\/\d+-(\d+)[^\)]+\) -(\d+)px/', $elm->getAttribute('style'), $out)) {
-                    $thumb = getenv('BASE_URL') . '/sample_image?gallery=' .
+                    $thumb = getenv('BASE_URL') . '/image/sample?gallery=' .
                      $this->getGalleryId() . '&token=' . $out[3] . '&page=' . $out[4] . '&width=' . $out[1] . '&x=' . $out[5] .'&height=' . $out[2];
                 }
 
@@ -157,27 +138,25 @@ class Gallery {
 
         return $this->pagesImages[$num];
     }
-    
-    public function load()
+
+    public function loadFromHtml()
     {
         if($this->loaded)
             return;
 
-        $response = apiRequest([
-            'method'    => 'gdata',
-            'gidlist'   => [[$this->galleryId, $this->galleryToken]],
-            'namespace' => 1
-        ]);
+        if(count($this->pagesHtml) == 0)
+            $html = $this->getPageHtml(1);
+        else
+            $html = array_values($this->pagesHtml)[0];
 
-        $this->galleryData = $response->gmetadata[0];
-        $this->numImages = $this->galleryData->filecount;
-        $this->loaded = true;
-        //$this->numPages = ceil($this->numImages / 40);
-        
-        /*
-        $html = $this->getPageHtml(1);
         $pq=new PhpQuery;
         $pq->load_str($html);
+
+        //$galleryData = new stdClass();
+        //$galleryData->token = $token;
+        //$galleryData->gid = $id;
+        $this->galleryData->category = $pq->query('div#gdc div.cs')[0]->textContent;
+        $this->galleryData->tags = [];
 
         $dataTable = $pq->query('div#gdd table tr');
         foreach($dataTable as $elm) {
@@ -185,18 +164,41 @@ class Gallery {
             $k = $cols[0]->textContent;
             $v = $cols[1]->textContent;
             if($k == 'Length:') {
-                $this->numImages = intval(explode(' ', $v)[0]);
+                $this->galleryData->filecount = intval(explode(' ', $v)[0]);
+            } else if($k == 'Posted:') {
+                $this->galleryData->posted_date = $v;
             }
         }
-        
-        $this->numPages = ceil($this->numImages / 40);
-        $this->name = $pq->query('h1#gn')[0]->textContent;
-        */
+
+        $tags = $pq->xpath('//div[@id=\'taglist\']//a');
+        foreach($tags as $t) {
+            $this->galleryData->tags[] = str_replace('ta_', '', $t->getAttribute('id'));
+        }
+
+        $this->loaded = true;
+    }
+    
+    public function load()
+    {
+        if($this->loaded)
+            return;
+
+        if(count($this->pagesHtml) > 0) {
+            $this->loadFromHtml();
+        } else {
+            $response = apiRequest([
+                'method'    => 'gdata',
+                'gidlist'   => [[$this->galleryId, $this->galleryToken]],
+                'namespace' => 1
+            ]);
+            $this->galleryData = $response->gmetadata[0];
+            $this->loaded = true;
+        }
     }
 
     public function getImages($num)
     {
-        $html = $this->getPageHtml(1 + floor($this->offset / 40));
+        $html = $this->getPageHtml($this->imagePage($this->offset));
         $pq=new PhpQuery;
         $pq->load_str($html);
         $elements = $pq->query('div.gdtm div a');
@@ -216,45 +218,34 @@ class Gallery {
         return $images;
     }
 
-    public function nextImage()
+    public function nextImage($reverse=false)
     {
-        error_log('next gallery image');
+        $offset = $this->offset;
+        if($reverse) {
+            $this->loadFromHtml();
+            $offset = $this->galleryData->filecount - $this->offset - 1;
+        }
 
-        if($this->offset > $this->galleryData->filecount)
+        $page = $this->imagePage($offset);
+        $images = $this->getPageImages($page);
+
+        if(count($images) == 0)
             return null;
 
-        $page = 1 + floor($this->offset / 40);
-        $images = $this->getPageImages($page);
-        $subIndex = $this->offset % 40;
+        $subIndex = $offset % 40;
         if(count($images) <= $subIndex)
             return null;
 
         $this->lastImage = $images[$subIndex];
-        $this->offset ++;
-        return $this->lastImage;
-
-        /*
-        if($this->lastImage == null) {
-            $html = $this->getPageHtml(1 + floor($this->offset / 40));
-            $pq=new PhpQuery;
-            $pq->load_str($html);
-            $elements = $pq->query('div.gdtm div a');
-            $startUrl = $elements[$this->offset%40]->getAttribute('href');
-
-            preg_match("/s\\/([a-z0-9]+)\\/\\d+-(\\d+)$/", $startUrl, $out);
-            $this->lastImage = new Image($out[2], $out[1], $this);
-            $this->offset ++;
-        } else {
-            $this->lastImage = $this->lastImage->nextImage();
-            $this->offset ++;
-        }
+        $this->offset += 1;
 
         return $this->lastImage;
-        */
     }
 
     public function getTags()
     {
+        $this->load();
+
         $tags = [];
         foreach($this->galleryData->tags as $t) {
             $pts = explode(':', $t);
@@ -283,6 +274,8 @@ class Gallery {
 
     public function getPostData($asImage = false)
     {
+        $this->load();
+
         $data = [
             'tags'          => [],
             'author'        => null,
@@ -292,8 +285,9 @@ class Gallery {
         ];
 
         if($asImage) {
+            $data['title'] = $this->galleryData->title;
             $data['id'] = $this->getId();
-            $data['file_url'] = getenv('BASE_URL') . '/full_banner?id=' . $this->getId();
+            $data['file_url'] = getenv('BASE_URL') . 'gallery/banner?id=' . $this->getId(':');
             $data['preview_url'] = $this->galleryData->thumbUrl;
             $data['source'] = 'https://e-hentai.org/g/' . $this->galleryData->gid . '/' . $this->galleryData->token . '/';
             $data['has_children'] = true;
@@ -317,5 +311,11 @@ class Gallery {
 
         
         return $data;
+    }
+
+    public function checkFilter($filters)
+    {
+        $this->loadFromHtml();
+        
     }
 }

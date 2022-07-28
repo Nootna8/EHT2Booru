@@ -114,8 +114,8 @@ class Handler {
         if($sort == 'desc')
             $this->reverse = true;
 
-        if($sort == 'votes')
-            $this->list = 'popular';
+        // if($sort == 'votes')
+        //     $this->list = 'popular';
 
         if($sort == 'score')
             $this->list = 'toplist.php?tl=11';

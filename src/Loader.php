@@ -38,7 +38,12 @@ class LoaderImage {
 
     protected function getSearchPage($num)
     {
-        return websiteRequest($this->params + ['page' => $numr-1], $this->list);
+        if($this->list) {
+            return websiteRequest($this->params + ['p' => $numr-1], $this->list);
+        } else {
+            return websiteRequest($this->params + ['page' => $numr-1], $this->list);
+        }
+        
     }
 
     protected function loadPage()

@@ -4,7 +4,8 @@ use PhpQuery\PhpQuery;
 
 global $memcache;
 $memcache = new Memcached;
-$memcache->addServer('localhost', 11211) or die ("Could not connect");
+$memcache->addServer('localhost', 11211) or die ("Could not connect to mem");
+isset($memcache->getStats()['localhost:11211']) or die ("Could not connect to mem");
 
 function getCachedVal($key, $loader) {
     global $memcache;

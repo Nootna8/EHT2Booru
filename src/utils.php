@@ -19,14 +19,18 @@ function getCachedVal($key, $loader) {
 
 function getProxy()
 {
-    global $memcache, $proxies;
-    $pos = $memcache->get('proxy-position');
-    if(!$pos)
-        $pos = 0;
+    global $memcache;
+    $proxies = explode(';', getenv('EHT_PROXIES'));
+    if(count($proxies) == 0)
+        $proxies = [''];
 
-    $uses = $memcache->get('proxy-'.$pos.'-uses');
-    if(!$uses)
-        $uses = 0;
+    $pos = getCachedVal('proxy-position', function() {
+        return 0;
+    });
+
+    $uses = getCachedVal('proxy-'.$pos.'-uses', function() {
+        return 0;
+    });
 
     if($uses > 10) {
         $memcache->set('proxy-'.$pos.'-uses', 0);
@@ -34,7 +38,6 @@ function getProxy()
         if($pos >= count($proxies))
             $pos = 0;
         $memcache->set('proxy-position', $pos);
-
         return getProxy();
     }
 
@@ -42,7 +45,10 @@ function getProxy()
 
     error_log('proxy: ' . $pos);
 
-    return $proxies[$pos];
+    if($proxies[$pos])
+        return [CURLOPT_PROXY => $proxies[$pos]];
+    else
+        return [];
 }
 
 function websiteRequest($arguments, $urlAdd = null) {

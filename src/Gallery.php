@@ -287,7 +287,7 @@ class Gallery {
         if($asImage) {
             $data['title'] = $this->galleryData->title;
             $data['id'] = $this->getId();
-            $data['file_url'] = getenv('BASE_URL') . 'gallery/banner?id=' . $this->getId(':');
+            $data['file_url'] = getenv('BASE_URL') . '/gallery/banner?id=' . $this->getId(':');
             $data['preview_url'] = $this->galleryData->thumbUrl;
             $data['source'] = 'https://e-hentai.org/g/' . $this->galleryData->gid . '/' . $this->galleryData->token . '/';
             $data['has_children'] = true;

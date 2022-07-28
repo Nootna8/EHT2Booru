@@ -260,7 +260,7 @@ class Gallery {
             $pts = explode(':', $t);
             if(count($pts) > 1) {
                 if($pts[0] == 'character') {
-                    $tags[] = $pts[0] . '#' . $pts[1];
+                    $tags[] = $pts[1] . '#' . $pts[0];
                 }
                 $tags[] = $pts[1];
                 continue;
@@ -273,7 +273,7 @@ class Gallery {
         $categories = getCategories();
         foreach($categories as $c) {
             if($c['name'] == $this->galleryData->category) {
-                $tags[] = 'category#' . $c['tag'];
+                $tags[] = $c['tag'] . '#category';
                 break;
             }
         }

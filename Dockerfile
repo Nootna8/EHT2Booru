@@ -21,7 +21,7 @@ COPY composer.json /var/www/html
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
     && composer install
 
-COPY src/* /var/www/html/src
+COPY src/ /var/www/html/src/
 COPY index.php /var/www/html
 COPY .htaccess /var/www/html
 COPY entrypoint.sh /entrypoint.sh

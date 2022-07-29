@@ -6,7 +6,7 @@ class Handler {
         '/gallery/banner'   => 'handleBanner',
         '/image/sample'     => 'handleSample',
         '/image/main'       => 'handleGalleryImage',
-        '/big_image'        => 'handleBigImage',
+        '/image/big'        => 'handleBigImage',
         '/'                 => 'loginForm',
         '/create-key'       => 'handleCreateKey'
     ];
@@ -50,10 +50,15 @@ class Handler {
     public function handle()
     {
         try {
+            if(getCookieJar() === false)
+                throw new Exception("Invalid login");
+
             return $this->{$this->method}();
         } catch (Exception $e) {
+            http_response_code(500);
             echo($e->getTraceAsString());
             error_log('Exception: ' . $e->getMessage());
+            throw $e;
         }
     }
 
@@ -224,26 +229,119 @@ class Handler {
         $gallery = Gallery::fromId($gToken, $gId);
         $image = new Image($pageNr, $iToken, $gallery);
 
-        $url = $image->getBigUrl();
-        $url = str_replace('https', 'http', $url);
-        $client = new RestClient();
-        $resp = $client->get($url);
-        var_dump($resp);
+        $cookieJar = getCookieJar();
+        if(!$cookieJar)
+            throw new Exception("Not logged in");
+
+        $cookieHeader = [];
+        foreach($cookieJar as $k=>$v)
+            $cookieHeader[] = $k.'='.$v;
+        $cookieHeader = implode('; ', $cookieHeader);
+
+        $ch = curl_init($image->getBigUrl());
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+        curl_setopt($ch, CURLOPT_HEADER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'Host: e-hentai.org',
+            'User-Agent: curl/7.68.0',
+            'Cookie: '.$cookieHeader
+        ));
+        curl_setopt($ch, CURLOPT_VERBOSE, true);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        
+        $lines = array_map('trim', explode("\n", $response));
+        foreach($lines as $line) {
+            //Header end here
+            if(strlen($line) == 0)
+                break;
+            
+            $pts = explode(':', $line, 2);
+            if($pts[0] != 'location')
+                continue;
+
+            header('Location: ' . $pts[1]);
+            return;
+        }
+
+        header('Location: ' . $image->getFileUrl());
     }
 
     protected function handleCreateKey()
     {
-        $url = 'https://forums.e-hentai.org/';
-        $client = new RestClient(['base_url' => $url, 'curl_options' => getProxy()]);
-        $req = http_build_query([
-            'UserName'  => $_POST['username'],
-            'PassWord'  => $_POST['password']
+        $url = 'https://forums.e-hentai.org/index.php?act=Login&CODE=01';
+        $request = http_build_query([
+            'CookieDate'        => '1',
+            'b'                 => 'ds',
+            'UserName'          => $_POST['username'],
+            'PassWord'          => $_POST['password'],
+            'ipb_login_submit'  => 'Login!'
         ]);
-        $response = $client->post('index.php?act=Login&CODE=01', $req);
-        var_dump($req, $response);
+
+        $cacheKey = 'login-' . hash('sha256', $url.$request);
+        global $memcache;
+        $response = $memcache->get($cacheKey);
+        if(!$response) {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+                'CookieDate'        => '1',
+                'b'                 => 'ds',
+                'UserName'          => $_POST['username'],
+                'PassWord'          => $_POST['password'],
+                'ipb_login_submit'  => 'Login!'
+            ]));
+            //curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+            curl_setopt($ch, CURLOPT_HEADER, true);
+            $response = curl_exec($ch);
+            curl_close($ch);
+
+            if(stripos($response, 'The captcha was not entered correctly') !== false) {
+                $cap = 'https://www.recaptcha.net/recaptcha/api2/anchor?ar=1&k=6LewqhoTAAAAAIaVzC8y6XguPSIZLc5JWqICgHfT&co=aHR0cHM6Ly9mb3J1bXMuZS1oZW50YWkub3JnOjQ0Mw..&hl=en-GB&v=CHIHFAf1bjFPOjwwi5Xa4cWR&size=normal&cb=4acvlr6sp0du';
+                
+                $this->loginForm($_POST['username'], $_POST['password'], $cap);
+                exit;
+            }
+
+            if(stripos($response, 'You are now logged in') === false) {
+                var_dump($response);
+                echo 'Login failed';
+                exit;
+            }
+
+            $memcache->set($cacheKey, $response);
+        }
+
+        $cookieJar = [];
+        $lines = array_map('trim', explode("\n", $response));
+        foreach($lines as $line) {
+            //Header end here
+            if(strlen($line) == 0)
+                break;
+            
+            $pts = explode(':', $line, 2);
+            if($pts[0] != 'set-cookie')
+                continue;
+
+            if(!preg_match('/([a-z_]+)=([a-z0-9]+)/', $pts[1], $out))
+                continue;
+
+            $cookieJar[$out[1]] = $out[2];
+        }
+
+        $iv = getCachedVal('ssl-iv', function() {
+            return openssl_random_pseudo_bytes(16);
+        });
+
+        $pass_hash = hash('sha1', "choujin-steiner--" . $_POST['password'] . "--");
+        $key = 'cookiejar-' . openssl_encrypt($_POST['username'], "AES-128-CTR", $pass_hash, 0, $iv);
+        $memcache->set($key, openssl_encrypt(json_encode($cookieJar), "AES-128-CTR", $pass_hash, 0, $iv));
+
+        echo 'Set';
     }
 
-    protected function loginForm() { ?>
+    protected function loginForm($user=null, $pass=null, $cap=null) { ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -254,9 +352,13 @@ class Handler {
 </head>
 <body>
     <form method="POST" action="/create-key">
-        <input type="text" name="username" placeholder="username"/><br/>
-        <input type="password" name="password" placeholder="***"/><br/>
+        <input type="text" value="<?php echo($user); ?>" name="username" placeholder="username"/><br/>
+        <input type="password" value="<?php echo($pass); ?>" name="password" placeholder="***"/><br/>
         <input type="submit" />
+
+        <?php
+        if($cap) echo '<br /><iframe src="' . $cap . '" />';
+        ?>
     </form>    
 </body>
 </html>

@@ -135,3 +135,32 @@ function getCategories()
         return $categories;
     });
 }
+
+function getCookieJar($input=null)
+{
+    if(!$input)
+        $input = $_GET;
+
+    if(!isset($input['login'], $input['password_hash']))
+        return null;
+
+    global $memcache;
+    $iv = $memcache->get('ssl-iv');
+    if(!$iv)
+        return false;
+
+    $key = 'cookiejar-' . openssl_encrypt($input['login'], "AES-128-CTR", $input['password_hash'], 0, $iv);
+    $val = $memcache->get($key);
+    if(!$val)
+        return false;
+
+    $val = openssl_decrypt($val, "AES-128-CTR", $input['password_hash'], 0, $iv);
+    if(!$val)
+        return false;
+    
+        $val = json_decode($val, true);
+    if(!is_array($val))
+        return false;
+
+    return $val;
+}

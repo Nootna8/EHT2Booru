@@ -21,14 +21,15 @@ class Image {
     {
         $this->load();
         preg_match('/id="img" src="([^"]+)"/', $this->imageData->i3, $imgOut);
-        return $imgOut[1];
+        return html_entity_decode($imgOut[1]);
     }
 
     public function getBigUrl()
     {
         $this->load();
-        if(preg_match('/<a href="([^"]+)"/', $this->imageData->i7, $fullImgOut))
-            return $fullImgOut[1];
+        if(isset($this->imageData->bigUrl))
+            return $this->imageData->bigUrl;
+
         return null;
     }
 
@@ -46,6 +47,18 @@ class Image {
         $tags = $this->gallery->getTags();
         $tags[] = $this->getId();
         return $tags;
+    }
+
+    protected function parseFileSize($str)
+    {
+        $pts = explode(' ', $str, 2);
+        if($pts[1] == 'KB')
+            return $pts[0] * 1024;
+
+        if($pts[1] == 'MB')
+            return $pts[0] * 1024 * 1024;
+
+        return null;
     }
 
     protected function load()
@@ -70,14 +83,23 @@ class Image {
             'imgkey'    => $this->imageToken,
             'showkey'   => $showKey
         ]);
+
+        if(preg_match('/<a href="([^"]+)"/', $this->imageData->i7, $fullImgOut)) {
+            $this->imageData->bigUrl = html_entity_decode($fullImgOut[1]);
+
+            preg_match('/original (\\d+) x (\\d+) (.+) source/', $this->imageData->i7, $fullSizeOut);
+            $this->imageData->bigX = $fullSizeOut[1];
+            $this->imageData->bigY = $fullSizeOut[2];
+            $this->imageData->bigFileSize = $this->parseFileSize($fullSizeOut[3]);
+        }
     }
 
     public function getPostData()
     {
-        //$this->load();
-        //preg_match('/<a href="([^"]+)"/', $this->imageData->i7, $fullImgOut);
+        if(getCookieJar())
+            $this->load();
 
-        return [
+        $ret = [
             'id'            => $this->getId(),
             'tags'          => implode(' ', $this->getTags()),
             //'has_comments'  => false,
@@ -86,15 +108,37 @@ class Image {
             //'has_notes'     => false,
             //'rating'        => 's',
             //'creator_id'    => 123,
-            'width'         => $this->imageData->x,
-            'height'        => $this->imageData->y,
+
             'source'        => 'https://e-hentai.org/s/' . $this->imageToken . '/' . $this->gallery->getGalleryId() . '-' . $this->pageNr,
-            'file_size'     => $this->imageData->si,
-            'file_url'      => getenv('BASE_URL') . '/image/main?id=' . $this->getId(':'),
-            //'file_url'      => $fullImgOut[1] ?? $imgOut[1],
-            'preview_url'   => $this->thumb == null ? $this->getFileUrl() : $this->thumb,
+            
             //'md5'           => 'adfc1a6da575574f9cccc5c3aa33270b'
         ] + $this->gallery->getPostData();
+
+        $normalFileUrl = getenv('BASE_URL') . '/image/main?id=' . $this->getId(':');
+
+        $ret['preview_url'] = $normalFileUrl;
+        if($this->thumb)
+            $ret['preview_url'] = $this->thumb;
+
+        $ret['file_url'] = $normalFileUrl;
+        $ret['width'] = $this->imageData->x;
+        $ret['height'] = $this->imageData->y;
+        $ret['file_size'] = $this->imageData->si;
+
+        if(getCookieJar() && $this->getBigUrl()) {
+            $ret['sample_width'] = $ret['width'];
+            $ret['sample_height'] = $ret['height'];
+            $ret['sample_url'] = $ret['file_url'];
+            $ret['sample_size'] = $ret['file_size'];
+        
+            $fileUrl = getenv('BASE_URL') . '/image/big?id=' . $this->getId(':') . '&login='.$_GET['login'].'&password_hash='.$_GET['password_hash'];
+            $ret['file_url'] = $fileUrl;
+            $ret['width'] = $this->imageData->bigX;
+            $ret['height'] = $this->imageData->bigY;
+            $ret['file_size'] = $this->imageData->bigFileSize;
+        }
+
+        return $ret;
     }
 
     public function nextImage()

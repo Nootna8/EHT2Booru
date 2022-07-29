@@ -220,6 +220,8 @@ class Handler {
         list($it, $gt, $gToken, $gId, $iToken, $pageNr) = preg_split('/[:#]/', $this->getParam('id'));
         $gallery = Gallery::fromId($gToken, $gId);
         $image = new Image($pageNr, $iToken, $gallery);
+
+        header('Content-Type: image/*');
         header('Location: ' . $image->getFileUrl());
     }
 
@@ -260,11 +262,15 @@ class Handler {
             if($pts[0] != 'location')
                 continue;
 
-            header('Location: ' . $pts[1]);
+            $loc = str_replace('?dl=1', '', $pts[1]);
+
+            header('Content-Type: image/*');
+            header('Location: ' . $loc);
             return;
         }
 
-        header('Location: ' . $image->getFileUrl());
+        //header('Location: ' . $image->getFileUrl());
+        throw new Exception("Failed");
     }
 
     protected function handleCreateKey()

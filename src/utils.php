@@ -51,72 +51,6 @@ function getProxy()
         return [];
 }
 
-function websiteRequest($arguments, $urlAdd = null) {
-    global $memcache;
-
-    $url = 'http://e-hentai.org/' . $urlAdd;
-    if($arguments) {
-        $url .= '?' . http_build_query($arguments);
-    }
-
-    $doRequest = function() use ($url) {
-        error_log($url);
-
-        $headers = array(
-            "Cookie: nw=1",
-        );
-
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt_array($ch, getProxy());
-        $data = curl_exec($ch);
-        curl_close($ch);
-
-        if(stripos($data, 'Your IP address has been temporarily banned'))
-            throw new Exception("Banned proxy");
-
-        if(!$data)
-            throw new Exception("No website response");
-
-        return ['data' => $data, 'time' => time()];
-    };
-
-    $key = 'eht-request-cache-'.$url;
-    $data = getCachedVal($key, $doRequest);
-    if(time() - $data['time'] > 60*3) {
-        $data = $doRequest();
-        global $memcache;
-        $memcache->set($key, $data);
-    }
-    
-    return $data['data'];
-}
-
-function apiRequest($arguments) {
-    $request = json_encode($arguments);
-    $doRequest = function() use ($request) {
-        error_log($request);
-
-        $client = new RestClient(['base_url' => 'http://api.e-hentai.org/api.php', 'format' => 'json', 'curl_options' => getProxy()]);
-        $data = $client->post('', $request)->decode_response();
-        if(!$data)
-            throw new Exception("No api response");
-        
-        return ['data' => $data, 'time' => time()];
-    };
-
-    $key = 'eht-api-cache-'.$request;
-    $data = getCachedVal($key, $doRequest);
-    if(time() - $data['time'] > 60*3) {
-        $data = $doRequest();
-        global $memcache;
-        $memcache->set($key, $data);
-    }
-    
-    return $data['data'];
-}
-
 function getCategories()
 {
     return getCachedVal('eht-categories', function() {
@@ -141,7 +75,11 @@ function getCookieJar($input=null)
     if(!$input)
         $input = $_GET;
 
-    if(!isset($input['login'], $input['password_hash']))
+    //return null;
+
+    if(!isset($input['login']) || strlen($input['login']) == 0)
+        return null;
+    if(!isset($input['password_hash']) || strlen($input['password_hash']) == 0)
         return null;
 
     global $memcache;
@@ -158,7 +96,7 @@ function getCookieJar($input=null)
     if(!$val)
         return false;
     
-        $val = json_decode($val, true);
+    $val = json_decode($val, true);
     if(!is_array($val))
         return false;
 

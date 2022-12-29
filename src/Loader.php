@@ -41,9 +41,25 @@ class LoaderImage {
         if($this->list) {
             return websiteRequest($this->params + ['p' => $num-1], $this->list);
         } else {
-            return websiteRequest($this->params + ['page' => $num-1], $this->list);
+            $nextPtr = null;
+            $c = 0;
+            while($c < $num) {
+                $html = websiteRequest($this->params + ['next' => $nextPtr]);
+                
+                $pq=new PhpQuery;
+                $pq->load_str($html);
+                $nextElm = $pq->query('a#unext');
+                if(!$nextElm) {
+                    error_log("Last page");
+                    return null;
+                }
+                $nextPtr = (string)$nextElm[0]->getAttribute("href");
+                $nextPtr = explode('next=', $nextPtr)[1];
+                $c ++;
+            }
+            
+            return $html;
         }
-        
     }
 
     protected function loadPage()
@@ -163,10 +179,18 @@ class LoaderImage {
             if(!$image)
                 return $this->results;
 
-            $this->results[] = $image->getPostData();
+            if(getCookieJar()) {
+                $this->results[] = $image->getPostDataPromise();
+            } else {
+                $this->results[] = $image->getPostData();
+            }
         }
 
-        return $this->results;
+        if(getCookieJar()) {
+            return HttpPromise::all($this->results);
+        } else {
+            return $this->results;
+        }
     }
 }
 
@@ -213,15 +237,26 @@ class LoaderImageGallery extends LoaderImage {
     {
         $this->gallery->setOffset($this->offset);
 
+        $usePromise = getCookieJar() == true;
+
         while(count($this->results) < $this->limit) {
             $image = $this->nextImage();
             
-            if(!$image)
-                return $this->results;
+            if(!$image) {
+                if($usePromise) {
+                    return HttpPromise::all($this->results);
+                } else {
+                    return $this->results;
+                }
+            }
 
-            $this->results[] = $image->getPostData();
+            $this->results[] = $image->getPostData($usePromise);
         }
 
-        return $this->results;
+        if($usePromise) {
+            return HttpPromise::all($this->results);
+        } else {
+            return $this->results;
+        }
     }
 }

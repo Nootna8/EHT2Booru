@@ -2,6 +2,7 @@
 
 require_once(__DIR__ . '/vendor/autoload.php');
 require_once(__DIR__ . '/src/utils.php');
+require_once(__DIR__ . '/src/HttpRequest.php');
 require_once(__DIR__ . '/src/Gallery.php');
 require_once(__DIR__ . '/src/Handler.php');
 require_once(__DIR__ . '/src/Image.php');

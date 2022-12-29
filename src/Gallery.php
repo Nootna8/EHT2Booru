@@ -21,6 +21,7 @@ class Gallery {
     {
         if(!$galleryData)
             throw new Exception("No data");
+
         $this->galleryData = $galleryData;
         $this->loaded = $loaded;
     }
@@ -80,7 +81,7 @@ class Gallery {
         return $ret;
     }
 
-    public function getId($seperator = '#')
+    public function getId($seperator = ':')
     {
         $id = 'gallery';
         $id .= $seperator.$this->galleryData->token;
@@ -117,6 +118,7 @@ class Gallery {
             $pq=new PhpQuery;
             $pq->load_str($html);
 
+            error_log("Getting images");
             $images = [];
             
             $elements = $pq->query('div.gdtm div');
@@ -128,7 +130,7 @@ class Gallery {
                 $thumb = '';
                 if(preg_match('/width:(\d+)px.+height:(\d+)px.+url\([^\)]+\/(\d+)\/\d+-(\d+)[^\)]+\) -(\d+)px/', $elm->getAttribute('style'), $out)) {
                     $thumb = getenv('BASE_URL') . '/image/sample?gallery=' .
-                     $this->getGalleryId() . '&token=' . $out[3] . '&page=' . $out[4] . '&width=' . $out[1] . '&x=' . $out[5] .'&height=' . $out[2];
+                    $this->getGalleryId() . '&token=' . $out[3] . '&page=' . $out[4] . '&width=' . $out[1] . '&x=' . $out[5] .'&height=' . $out[2];
                 }
 
                 $images[] = new Image($pageOut[2], $pageOut[1], $this, $thumb);
@@ -172,7 +174,11 @@ class Gallery {
 
         $tags = $pq->xpath('//div[@id=\'taglist\']//a');
         foreach($tags as $t) {
-            $this->galleryData->tags[] = str_replace('ta_', '', $t->getAttribute('id'));
+            $this->galleryData->tags[] = str_replace(
+                ['ta_', '_'],
+                ['', '-'],
+                $t->getAttribute('id')
+            );
         }
 
         $this->loaded = true;
@@ -250,9 +256,9 @@ class Gallery {
         foreach($this->galleryData->tags as $t) {
             $pts = explode(':', $t);
             if(count($pts) > 1) {
-                if($pts[0] == 'character') {
-                    $tags[] = $pts[1] . '#' . $pts[0];
-                }
+                // if($pts[0] == 'character') {
+                //     $tags[] = $pts[1] . '#' . $pts[0];
+                // }
                 $tags[] = $pts[1];
                 continue;
             }
@@ -264,7 +270,7 @@ class Gallery {
         $categories = getCategories();
         foreach($categories as $c) {
             if($c['name'] == $this->galleryData->category) {
-                $tags[] = $c['tag'] . '#category';
+                $tags[] = 'category:' . $c['tag'];
                 break;
             }
         }
@@ -281,7 +287,7 @@ class Gallery {
             'author'        => null,
             'score'         => 0,//round($this->galleryData->rating),
             'created_at'    => $this->galleryData->posted_date,
-            'parent_id'     => 123
+            'parent_id'     => null
         ];
 
         if($asImage) {
@@ -316,6 +322,5 @@ class Gallery {
     public function checkFilter($filters)
     {
         $this->loadFromHtml();
-        
     }
 }

@@ -33,7 +33,7 @@ class Image {
         return null;
     }
 
-    public function getId($seperator = '#')
+    public function getId($seperator = ':')
     {
         $id = 'image' . $seperator;
         $id .= $this->gallery->getId($seperator);
@@ -45,7 +45,7 @@ class Image {
     public function getTags()
     {
         $tags = $this->gallery->getTags();
-        $tags[] = $this->getId();
+        //$tags[] = $this->getId();
         return $tags;
     }
 
@@ -61,22 +61,20 @@ class Image {
         return null;
     }
 
-    protected function load()
+    protected function load($asPromise = false)
     {
         if($this->imageData)
             return;
 
-        global $memcache;
         $showKeyKey = 'showkey-' . date('Y-m-d') . '-' . $this->gallery->getGalleryId();
-        $showKey = $memcache->get($showKeyKey);
-        if(!$showKey) {
-            $html = websiteRequest([], 's/' . $this->imageToken . '/' . $this->gallery->getGalleryId() . '-' . $this->pageNr);
+        $me = $this;
+        $showKey = getCachedVal($showKeyKey, function() use ($me) {
+            $html = websiteRequest([], 's/' . $me->imageToken . '/' . $me->gallery->getGalleryId() . '-' . $me->pageNr);
             preg_match('/var showkey="([a-z0-9]+)"/', $html, $out);
-            $showKey = $out[1];
-            $memcache->set($showKeyKey, $showKey);
-        }
+            return $out[1];
+        });
 
-        $this->imageData = apiRequest([
+        $req = new HttpRequest('API', [
             'method'    => 'showpage',
             'gid'       => $this->gallery->getGalleryId(),
             'page'      => $this->pageNr,
@@ -84,34 +82,43 @@ class Image {
             'showkey'   => $showKey
         ]);
 
-        if(preg_match('/<a href="([^"]+)"/', $this->imageData->i7, $fullImgOut)) {
-            $this->imageData->bigUrl = html_entity_decode($fullImgOut[1]);
+        $promise = new HttpPromise($req);
+        $promise->then(function($response) use ($me) {
+            $me->imageData = json_decode($response);
+            if(preg_match('/<a href="([^"]+)"/', $me->imageData->i7, $fullImgOut)) {
+                $me->imageData->bigUrl = html_entity_decode($fullImgOut[1]);
+    
+                preg_match('/original (\\d+) x (\\d+) (.+) source/', $me->imageData->i7, $fullSizeOut);
+                $me->imageData->bigX = $fullSizeOut[1];
+                $me->imageData->bigY = $fullSizeOut[2];
+                $me->imageData->bigFileSize = $me->parseFileSize($fullSizeOut[3]);
+            }
+            return false;
+        });
 
-            preg_match('/original (\\d+) x (\\d+) (.+) source/', $this->imageData->i7, $fullSizeOut);
-            $this->imageData->bigX = $fullSizeOut[1];
-            $this->imageData->bigY = $fullSizeOut[2];
-            $this->imageData->bigFileSize = $this->parseFileSize($fullSizeOut[3]);
+        if($asPromise) {
+            return $promise;
         }
+
+        return $promise->resolve();
     }
 
-    public function getPostData()
+    public function getPostData($asPromise = false)
     {
+        if($asPromise) {
+            return $this
+                ->load(true)
+                ->then([$this, 'getPostData']);
+        }
+
         if(getCookieJar())
             $this->load();
 
         $ret = [
             'id'            => $this->getId(),
             'tags'          => implode(' ', $this->getTags()),
-            //'has_comments'  => false,
             'status'        => 'active',
-            //'has_children'  => false,
-            //'has_notes'     => false,
-            //'rating'        => 's',
-            //'creator_id'    => 123,
-
             'source'        => 'https://e-hentai.org/s/' . $this->imageToken . '/' . $this->gallery->getGalleryId() . '-' . $this->pageNr,
-            
-            //'md5'           => 'adfc1a6da575574f9cccc5c3aa33270b'
         ] + $this->gallery->getPostData();
 
         $normalFileUrl = getenv('BASE_URL') . '/image/main?id=' . $this->getId(':');

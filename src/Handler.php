@@ -8,7 +8,8 @@ class Handler {
         '/image/main'       => 'handleGalleryImage',
         '/image/big'        => 'handleBigImage',
         '/'                 => 'loginForm',
-        '/create-key'       => 'handleCreateKey'
+        '/create-key'       => 'handleCreateKey',
+        '/proxies/add'      => 'proxiesAdd',
     ];
     protected $method;
 
@@ -56,7 +57,6 @@ class Handler {
             return $this->{$this->method}();
         } catch (Exception $e) {
             http_response_code(500);
-            echo($e->getTraceAsString());
             error_log('Exception: ' . $e->getMessage());
             throw $e;
         }
@@ -146,6 +146,81 @@ class Handler {
         return $filterCategories;
     }
 
+    protected function testProxy($proxy)
+    {
+        $ch = curl_init('http://ifconfig.me/');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt_array($ch, $proxy);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 1);
+        $result = curl_exec($ch);
+        curl_close($ch);
+        return $result;
+    }
+
+    protected function proxiesAdd()
+    {
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Headers: *');
+
+        $entityBody = file_get_contents('php://input');
+        $entityBody = json_decode($entityBody);
+        if(!is_array($entityBody) || count($entityBody) == 0) {
+            return;
+        }
+
+        $proxies = array_map(function($p) {
+            return [
+                CURLOPT_PROXYTYPE   => $GLOBALS['CURLPROXY_' . $p->type],
+                CURLOPT_PROXY       => $p->ip,
+                CURLOPT_PROXYPORT   => $p->port
+            ];
+        }, $entityBody);
+
+        global $memcache;
+        $cachedProxies = $memcache->get('proxies');
+        if(!is_array($cachedProxies)) {
+            $cachedProxies = [];
+        }
+        $cachedProxyIps = array_column($cachedProxies, CURLOPT_PROXY);
+
+        error_log("Proxies received: " . count($proxies) . ' cached: ' . count($cachedProxyIps));
+
+        $me = $this;
+        $proxies = array_filter($proxies, function($p) use ($me, $cachedProxyIps) {
+            $proxyIp = $p[CURLOPT_PROXY];
+
+            if(in_array($proxyIp, $cachedProxyIps)) {
+                return false;
+            }
+
+            $result = $me->testProxy($p);
+            if($result != $proxyIp) {
+                return false;
+            }
+
+            return true;
+        });
+
+        $cachedProxies = array_merge($cachedProxies, $proxies);
+        error_log("Proxies test 1: " . count($proxies) . ' merged: ' . count($cachedProxies));
+
+        $cachedProxies = array_filter($cachedProxies, function($p) {
+            $request = new HttpRequest('SITE', [], null, $p);
+            try {
+                $html = $request->doRequest();
+                return true;
+            }
+            catch(Exception $e) {
+                return false;
+            }
+        });
+
+        error_log("Proxies test 2: " . count($cachedProxies));
+        echo count($cachedProxies);
+
+        $memcache->set('proxies', $cachedProxies);
+    }
+
     protected function handlePosts()
     {
         $this->page = $this->getParam('page', false, 1);
@@ -183,6 +258,9 @@ class Handler {
         list($gt, $gToken, $gId) = preg_split('/[:#]/', $this->getParam('id'));
         $gallery = Gallery::fromPage($gId, $gToken, 1);
         $image = $gallery->nextImage();
+        if(!$image) {
+            throw new Exception("Loading gallery failed");
+        }
         $url = $image->getPostData()['file_url'];
         header('Location: ' . $url);
     }
@@ -221,8 +299,13 @@ class Handler {
         $gallery = Gallery::fromId($gToken, $gId);
         $image = new Image($pageNr, $iToken, $gallery);
 
+        $url = $image->getFileUrl();
+        if(!$url) {
+            throw new Exception("Loading image failed");
+        }
+
         header('Content-Type: image/*');
-        header('Location: ' . $image->getFileUrl());
+        header('Location: ' . $url);
     }
 
     protected function handleBigImage()

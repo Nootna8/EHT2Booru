@@ -56,6 +56,9 @@ function getCategories()
     return getCachedVal('eht-categories', function() {
         $categories = [];
         $html = websiteRequest([], '');
+        if(!$html) {
+            throw new Exception("No html");
+        }
         $pq=new PhpQuery;
         $pq->load_str($html);
         $elements = $pq->query('div.cs');

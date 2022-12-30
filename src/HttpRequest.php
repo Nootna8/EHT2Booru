@@ -3,13 +3,42 @@
 class Proxy {
     protected $data = [];
 
+    public static function fromJson($json)
+    {
+        return array_map(function($p) {
+            return new Proxy([
+                CURLOPT_PROXYTYPE   => constant('CURLPROXY_' . $p->type),
+                CURLOPT_PROXY       => $p->ip,
+                CURLOPT_PROXYPORT   => $p->port
+            ]);
+        }, $json);
+    }
+
+    public static function fromMemcached()
+    {
+        $proxies = getCachedVal('proxies', function() {
+            return [];
+        });
+
+        return array_map(function ($p) {
+            return new Proxy($p);
+        }, $proxies);
+    }
+
+    public static function storeNew($proxies)
+    {
+        global $memcache;
+        $data = array_column($proxies, 'data');
+        $memcache->set('proxies', $data);
+    }
+
     public static function getProxy($forceNext = false)
     {
         $proxies = getCachedVal('proxies', function() {
             return [];
         });
         if(count($proxies) == 0) {
-            return null;
+            throw new Exception("No proxies available");
         }
 
         $pos = getCachedVal('proxy-position', function() {
@@ -42,15 +71,20 @@ class Proxy {
 
     public function use($handle)
     {
-        error_log("Using proxy: " . $this->data[CURLOPT_PROXY]);
+        error_log("Using proxy: " . $this->getIp());
         curl_setopt_array($handle, $this->data);
         $this->addStateField('usesTotal');
         $this->addStateField('uses');
     }
 
+    public function getIp()
+    {
+        return $this->data[CURLOPT_PROXY];
+    }
+
     protected function getCacheKey()
     {
-        return 'proxy-' . $this->data[CURLOPT_PROXY] . '-state';
+        return 'proxy-' . $this->getIp() . '-state';
     }
 
     public function getState()
@@ -86,6 +120,9 @@ class Proxy {
 
     public function __construct($data)
     {
+        if($data == null) {
+            throw new Exception("No data?");
+        }
         $this->data = $data;
     }
 
@@ -93,21 +130,26 @@ class Proxy {
     {
         $ch = curl_init('http://ifconfig.me/');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt_array($ch, $proxy);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 2);
+        curl_setopt_array($ch, $this->data);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 1);
         $result = curl_exec($ch);
         curl_close($ch);
-        return $result;
+        if($result != $this->getIp()) {
+            echo $result . " != " . $this->getIp() . "\n";
+            return false;
+        }
+        return true;
     } 
 
     public function testEht()
     {
-        $request = new HttpRequest('SITE', [], null, $p);
+        $request = new HttpRequest('SITE', [], null, $this);
         try {
-            $html = $request->doRequest();
+            $html = $request->doRequestInternal();
             return true;
         }
         catch(Exception $e) {
+            echo "Proxy test failed: " . $e->getMessage() . "\n";
             return false;
         }
     }
@@ -126,7 +168,7 @@ class HttpRequest {
 
     protected function getCacheKey()
     {
-        return '3-eht-http-cache-'.md5($this->urlAdd.'-'.$this->method.'-'.json_encode($this->arguments));
+        return '2-eht-http-cache-'.md5($this->urlAdd.'-'.$this->method.'-'.json_encode($this->arguments));
     }
 
     public function __construct($method, $arguments, $urlAdd = null, $proxy = [])
@@ -232,8 +274,8 @@ class HttpRequest {
 
         $ret = ['data' => $this->result, 'time' => $this->time];
 
-        global $memcache;
-        $memcache->set($this->getCacheKey(), $ret);
+        //global $memcache;
+        //$memcache->set($this->getCacheKey(), $ret);
 
         return $ret;
     }
@@ -241,7 +283,7 @@ class HttpRequest {
     public function doRequest()
     {
         $this->tries = 0;
-        while($this->tries < 3) {
+        while($this->tries < 5) {
             $this->proxy = Proxy::getProxy($this->tries > 0);
 
             try {
@@ -282,6 +324,10 @@ class HttpRequest {
         }
 
         //error_log("Http resonse: " . $data['data']);
+
+        
+        //header('Content-Type: text/html');
+        //echo $data['data'];
 
         return $data['data'];
     }
@@ -386,7 +432,13 @@ class HttpPromise {
 
 function websiteRequest($arguments, $urlAdd = null) {
     $req = new HttpRequest('SITE', $arguments, $urlAdd);
-    return $req->getResult();
+    $res = $req->getResult();
+
+    if(!$res) {
+        throw new Exception("Something went wrong");
+    }
+
+    return $res;
 }
 
 function apiRequest($arguments) {

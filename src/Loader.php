@@ -2,7 +2,9 @@
 
 use PhpQuery\PhpQuery;
 
-class LoaderImage {
+const GALLERIES_PER_SEARCH = 16;
+
+class LoaderAllImages {
     protected $offset;
     protected $limit;
     protected $params;
@@ -11,7 +13,6 @@ class LoaderImage {
     protected $reverse = false;
     protected $skipped = 0;
     protected $pageNr = 0;
-    protected $lastPage = null;
     
     protected $results = [];
     protected $galleries = [];
@@ -41,20 +42,29 @@ class LoaderImage {
         if($this->list) {
             return websiteRequest($this->params + ['p' => $num-1], $this->list);
         } else {
-            $nextPtr = null;
+            $nextPtr = $this->reverse ? 1 : null;
+
+            $direction = $this->reverse ? 'prev' : 'next';
+
             $c = 0;
             while($c < $num) {
-                $html = websiteRequest($this->params + ['next' => $nextPtr]);
-                
-                $pq=new PhpQuery;
-                $pq->load_str($html);
-                $nextElm = $pq->query('a#unext');
-                if(!$nextElm) {
-                    error_log("Last page");
+                if($c > 0 && $nextPtr == null) {
                     return null;
                 }
-                $nextPtr = (string)$nextElm[0]->getAttribute("href");
-                $nextPtr = explode('next=', $nextPtr)[1];
+
+                $html = websiteRequest($this->params + [$direction => $nextPtr]);
+
+                $pq=new PhpQuery;
+                $pq->load_str($html);
+
+                $nextElm = $pq->query('a#u' . $direction);
+                
+                $nextPtr = null;
+                if(count($nextElm) > 0) {
+                    $nextPtr = (string)$nextElm[0]->getAttribute("href");
+                    $nextPtr = explode($direction . '=', $nextPtr)[1];
+                }
+
                 $c ++;
             }
             
@@ -65,30 +75,21 @@ class LoaderImage {
     protected function loadPage()
     {
         if($this->reverse) {
-            if($this->lastPage === null) {
-                $html = $this->getSearchPage($this->pageNr);
-                $pq=new PhpQuery;
-                $pq->load_str($html);
-
-                $pageElements = $pq->query('table.ptt tr td');
-                $this->lastPage = $pageElements[count($pageElements)-2]->textContent;
-            }
-
-            $html = $this->getSearchPage($this->lastPage - $this->pageNr + 1);
+            $html = $this->getSearchPage($this->pageNr);
             
             $pq=new PhpQuery;
             $pq->load_str($html);
         } else {
             $html = $this->getSearchPage($this->pageNr);
+            
+            if($html == null) {
+                $this->galleries = [];
+                return 0;
+            }
+
             $pq=new PhpQuery;
             $pq->load_str($html);
-
-            $pageElements = $pq->query('table.ptt tr td');
-            $this->lastPage = $pageElements[count($pageElements)-2]->textContent;
         }
-
-        //header('Content-Type: text/html');
-        //echo $html;
 
         $this->galleries = [];
         foreach($pq->query('table.itg.gltc tr') as $row) {
@@ -106,10 +107,6 @@ class LoaderImage {
     protected function nextPage()
     {
         $this->pageNr ++;
-
-        if($this->lastPage && $this->pageNr > $this->lastPage)
-            return 0;
-
         return $this->loadPage();
     }
 
@@ -194,7 +191,7 @@ class LoaderImage {
     }
 }
 
-class LoaderGallery extends LoaderImage {
+class LoaderGalleries extends LoaderAllImages {
     protected $pageNr;
     protected $params;
     
@@ -220,7 +217,7 @@ class LoaderGallery extends LoaderImage {
     }
 }
 
-class LoaderImageGallery extends LoaderImage {
+class LoaderGalleryImages extends LoaderAllImages {
     
     public function __construct($offset, $limit, $gallery) {
         $this->offset = $offset;

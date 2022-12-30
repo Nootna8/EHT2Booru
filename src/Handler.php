@@ -168,57 +168,43 @@ class Handler {
             return;
         }
 
-        $proxies = array_map(function($p) {
-            return [
-                CURLOPT_PROXYTYPE   => $GLOBALS['CURLPROXY_' . $p->type],
-                CURLOPT_PROXY       => $p->ip,
-                CURLOPT_PROXYPORT   => $p->port
-            ];
-        }, $entityBody);
+        $proxies = array_merge(Proxy::fromJson($entityBody), Proxy::fromMemcached());
+        $newProxies = [];
 
-        global $memcache;
-        $cachedProxies = $memcache->get('proxies');
-        if(!is_array($cachedProxies)) {
-            $cachedProxies = [];
+        $stats = [
+            'dup'   => 0,
+            'f1'    => 0,
+            'f2'    => 0,
+            'yes'   => 0
+        ];
+
+        // Undupplicate list and test
+        foreach($proxies as $proxy) {
+            $ip = $proxy->getIp();
+            $match = array_filter($newProxies, function($p) use ($ip) {
+                return $p->ip == $ip;
+            });
+            if(count($match) > 0) {
+                $stats['dup'] ++;
+                continue;
+            }
+            if(!$proxy->testIp()) {
+                $stats['f1'] ++;
+                continue;
+            }
+
+            if(!$proxy->testEht()) {
+                $stats['f2'] ++;
+                continue;
+            }
+
+            $stats['yes'] ++;
+            $newProxies[] = $proxy;
         }
-        $cachedProxyIps = array_column($cachedProxies, CURLOPT_PROXY);
 
-        error_log("Proxies received: " . count($proxies) . ' cached: ' . count($cachedProxyIps));
+        Proxy::storeNew($newProxies);
 
-        $me = $this;
-        $proxies = array_filter($proxies, function($p) use ($me, $cachedProxyIps) {
-            $proxyIp = $p[CURLOPT_PROXY];
-
-            if(in_array($proxyIp, $cachedProxyIps)) {
-                return false;
-            }
-
-            $result = $me->testProxy($p);
-            if($result != $proxyIp) {
-                return false;
-            }
-
-            return true;
-        });
-
-        $cachedProxies = array_merge($cachedProxies, $proxies);
-        error_log("Proxies test 1: " . count($proxies) . ' merged: ' . count($cachedProxies));
-
-        $cachedProxies = array_filter($cachedProxies, function($p) {
-            $request = new HttpRequest('SITE', [], null, $p);
-            try {
-                $html = $request->doRequest();
-                return true;
-            }
-            catch(Exception $e) {
-                return false;
-            }
-        });
-
-        error_log("Proxies test 2: " . count($cachedProxies));
-        echo count($cachedProxies);
-
-        $memcache->set('proxies', $cachedProxies);
+        var_dump($stats);
     }
 
     protected function handlePosts()
@@ -230,14 +216,14 @@ class Handler {
         $this->handleTags();
 
         if($this->gallery != null) {
-            $list = new LoaderImageGallery($offset, $limit, $this->gallery);
+            $list = new LoaderGalleryImages($offset, $limit, $this->gallery);
         } else {
             $params = ['f_search' => implode(' ', $this->tags), 'f_cats' => $this->handleCategories()];
             
             if($this->perGallery == -1) {
-                $list = new LoaderImage($offset, $limit, $params, $this->list);
+                $list = new LoaderAllImages($offset, $limit, $params, $this->list);
             } else {
-                $list = new LoaderGallery($offset, $limit, $params, $this->list);
+                $list = new LoaderGalleries($offset, $limit, $params, $this->list);
             }
         }
 

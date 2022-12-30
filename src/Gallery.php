@@ -2,6 +2,8 @@
 
 use PhpQuery\PhpQuery;
 
+const IMAGES_PER_GALLERY_PAGE = 40;
+
 class Gallery {
     protected $galleryData = null;
 
@@ -14,7 +16,7 @@ class Gallery {
 
     public function imagePage($num)
     {
-        return 1 + floor($num / 40);
+        return 1 + floor($num / IMAGES_PER_GALLERY_PAGE);
     }
     
     protected function __construct($galleryData, $loaded = false)
@@ -68,7 +70,9 @@ class Gallery {
         $galleryData->tags = [];
         $tags = $pq->query('td.gl3c a div div.gt', $row);
         foreach($tags as $t) {
-            $galleryData->tags[] = $t->getAttribute('title');
+            $tag = $t->getAttribute('title');
+            $tag = str_replace(' ', '-', $tag);
+            $galleryData->tags[] = $tag;
         }
 
         return new self($galleryData, true);
@@ -81,7 +85,7 @@ class Gallery {
         return $ret;
     }
 
-    public function getId($seperator = ':')
+    public function getId($seperator = '#')
     {
         $id = 'gallery';
         $id .= $seperator.$this->galleryData->token;
@@ -109,16 +113,23 @@ class Gallery {
 
         return $this->pagesHtml[$num];
     }
-
     
     public function getPageImages($num)
     {
+        if(!isset($this->galleryData->filecount)) {
+            $this->loadFromHtml();
+        }
+
+        $lastPage = ceil($this->galleryData->filecount / IMAGES_PER_GALLERY_PAGE);
+        if($num > $lastPage) {
+            return [];
+        }
+
         if(!isset($this->pagesImages[$num])) {
             $html = $this->getPageHtml($num);
             $pq=new PhpQuery;
             $pq->load_str($html);
 
-            error_log("Getting images");
             $images = [];
             
             $elements = $pq->query('div.gdtm div');
@@ -151,12 +162,12 @@ class Gallery {
         else
             $html = array_values($this->pagesHtml)[0];
 
+        if(!$html) {
+            throw new Exception("No html");
+        }
         $pq=new PhpQuery;
         $pq->load_str($html);
 
-        //$galleryData = new stdClass();
-        //$galleryData->token = $token;
-        //$galleryData->gid = $id;
         $this->galleryData->category = $pq->query('div#gdc div.cs')[0]->textContent;
         $this->galleryData->tags = [];
 
@@ -198,6 +209,9 @@ class Gallery {
                 'namespace' => 1
             ]);
             $this->galleryData = $response->gmetadata[0];
+            $this->galleryData->tags = array_map(function($t) {
+                return str_replace(' ', '-', $t);
+            }, $this->galleryData->tags);
             $this->loaded = true;
         }
     }
@@ -205,6 +219,9 @@ class Gallery {
     public function getImages($num)
     {
         $html = $this->getPageHtml($this->imagePage($this->offset));
+        if(!$html) {
+            throw new Exception("No html");
+        }
         $pq=new PhpQuery;
         $pq->load_str($html);
         $elements = $pq->query('div.gdtm div a');
@@ -238,7 +255,7 @@ class Gallery {
         if(count($images) == 0)
             return null;
 
-        $subIndex = $offset % 40;
+        $subIndex = $offset % IMAGES_PER_GALLERY_PAGE;
         if(count($images) <= $subIndex)
             return null;
 

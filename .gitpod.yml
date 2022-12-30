@@ -1,10 +1,10 @@
 tasks:
-  - name: Heroku
-    before: |
-      curl https://cli-assets.heroku.com/install.sh | sh
-      heroku login -i
-      heroku git:remote -a eht2booru
-    command: heroku logs -t
-  
   - name: Docker
     command: docker-compose up
+
+ports:
+  - port: 80
+    onOpen: ignore
+    name: Api
+    description: Api
+    visibility: public

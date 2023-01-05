@@ -25,6 +25,36 @@ class Proxy {
         }, $proxies);
     }
 
+    public static function fromScraper()
+    {
+        $proxyScraper = '/opt/proxy-scraper';
+        $proxyFile = '/tmp/proxies.txt';
+        
+        exec("cd $proxyScraper && python3 $proxyScraper/proxyScraper.py -p https -o $proxyFile");
+        exec("cd $proxyScraper && python3 $proxyScraper/proxyChecker.py -l $proxyFile -s e-hentai.org -t 5");
+        
+        $proxies = explode("\n", file_get_contents($proxyFile));
+        unlink($proxyFile);
+        
+        $proxies = array_filter($proxies);
+        $proxies = array_values($proxies);
+
+        $ret = array_map(function($p) {
+            list($ip, $port) = explode(':', $p);
+            return new Proxy([
+                CURLOPT_PROXY       => $ip,
+                CURLOPT_PROXYPORT   => $port
+            ]);
+        }, $proxies);
+
+        $ret = array_filter($ret, function($p) {
+            return $p->testEht();
+        });
+
+        Proxy::storeNew($ret);
+        error_log("Auto loaded " . count($ret) . " proxies");
+    }
+
     public static function storeNew($proxies)
     {
         global $memcache;
@@ -37,7 +67,17 @@ class Proxy {
         $proxies = getCachedVal('proxies', function() {
             return [];
         });
+
         if(count($proxies) == 0) {
+
+            Proxy::fromScraper();
+            $proxies = getCachedVal('proxies', function() {
+                return [];
+            });
+        }
+
+        if(count($proxies) == 0) {
+
             throw new Exception("No proxies available");
         }
 
@@ -149,13 +189,16 @@ class Proxy {
             return true;
         }
         catch(Exception $e) {
-            echo "Proxy test failed: " . $e->getMessage() . "\n";
+            error_log("Proxy " . $this->getIp() . " failed: " . $e->getMessage());
             return false;
         }
     }
 }
 
+const HTTP_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36';
+
 class HttpRequest {
+    protected $url;
     protected $urlAdd;
     protected $methop;
     protected $arguments;
@@ -186,22 +229,21 @@ class HttpRequest {
             curl_close($this->handle);
         }
 
-        $url = null;
         if($this->method == 'API') {
-            $url = 'http://api.e-hentai.org/api.php'; 
+            $this->url = 'http://api.e-hentai.org/api.php'; 
         }
         else if($this->method == 'SITE') {
-            $url = 'http://e-hentai.org/' . $this->urlAdd;
+            $this->url = 'http://e-hentai.org/' . $this->urlAdd;
 
             if($this->arguments) {
-                $url .= '?' . http_build_query($this->arguments);
+                $this->url .= '?' . http_build_query($this->arguments);
             }
         }
         else {
             throw new \Exception("Unsupported method: " . $this->method);
         }
 
-        $this->handle = curl_init($url);
+        $this->handle = curl_init($this->url);
 
         if($this->method == 'SITE') {
             curl_setopt($this->handle, CURLOPT_HTTPHEADER, [
@@ -218,6 +260,7 @@ class HttpRequest {
             curl_setopt($this->handle, CURLOPT_POSTFIELDS, json_encode($this->arguments) );             
         }
 
+        curl_setopt($this->handle, CURLOPT_USERAGENT, HTTP_USER_AGENT);
         curl_setopt($this->handle, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($this->handle, CURLOPT_TIMEOUT, 2);
 

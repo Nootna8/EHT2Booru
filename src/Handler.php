@@ -9,7 +9,7 @@ class Handler {
         '/image/big'        => 'handleBigImage',
         '/'                 => 'loginForm',
         '/create-key'       => 'handleCreateKey',
-        '/proxies/add'      => 'proxiesAdd',
+        '/proxies/add'      => 'proxiesAdd'
     ];
     protected $method;
 
@@ -144,17 +144,6 @@ class Handler {
             }
         }
         return $filterCategories;
-    }
-
-    protected function testProxy($proxy)
-    {
-        $ch = curl_init('http://ifconfig.me/');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt_array($ch, $proxy);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 1);
-        $result = curl_exec($ch);
-        curl_close($ch);
-        return $result;
     }
 
     protected function proxiesAdd()

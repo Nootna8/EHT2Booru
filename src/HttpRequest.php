@@ -31,7 +31,7 @@ class Proxy {
         $proxyFile = '/tmp/proxies.txt';
         
         exec("cd $proxyScraper && python3 $proxyScraper/proxyScraper.py -p https -o $proxyFile");
-        exec("cd $proxyScraper && python3 $proxyScraper/proxyChecker.py -l $proxyFile -s e-hentai.org -t 5");
+        exec("cd $proxyScraper && python3 $proxyScraper/proxyChecker.py -l $proxyFile -s e-hentai.org -t 3");
         
         $proxies = explode("\n", file_get_contents($proxyFile));
         unlink($proxyFile);
@@ -96,7 +96,7 @@ class Proxy {
             $uses = $state->uses;
         }
 
-        if($uses > 15 || $forceNext) {
+        if($uses > 10 || $forceNext) {
             $pos = getCachedVal('proxy-position', function() {
                 return 0;
             });
@@ -262,7 +262,7 @@ class HttpRequest {
 
         curl_setopt($this->handle, CURLOPT_USERAGENT, HTTP_USER_AGENT);
         curl_setopt($this->handle, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($this->handle, CURLOPT_TIMEOUT, 2);
+        curl_setopt($this->handle, CURLOPT_TIMEOUT, 3);
 
         if(is_array($this->proxy)) {
             curl_setopt_array($this->handle, $this->proxy);

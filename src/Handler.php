@@ -109,6 +109,8 @@ class Handler {
                     break;
             }
 
+            $t = str_replace('-', ' ', $t);
+
             if(!$handled)
                 $this->tags[] = $t;
         }
@@ -253,7 +255,7 @@ class Handler {
         $image = imagecreatefromstring($imageData);
         
         $rect = [
-            'width'     => $this->getParam('width'),
+            'width'     => $this->getParam('width')-1,
             'height'    => $this->getParam('height'),
             'x'         => $this->getParam('x'),
             'y'         => 0

@@ -29,9 +29,15 @@ class Proxy {
     {
         $proxyScraper = '/opt/proxy-scraper';
         $proxyFile = '/tmp/proxies.txt';
+
+        $siteBase = getenv('E_SITE_BASE');
+        if(!$siteBase) {
+            $siteBase = 'http://e-hentai.org/';
+        }
+        $domain = parse_url($siteBase, PHP_URL_HOST);
         
         exec("cd $proxyScraper && python3 $proxyScraper/proxyScraper.py -p https -o $proxyFile");
-        exec("cd $proxyScraper && python3 $proxyScraper/proxyChecker.py -l $proxyFile -s e-hentai.org -t 3");
+        exec("cd $proxyScraper && python3 $proxyScraper/proxyChecker.py -l $proxyFile -s $domain -t 3");
         
         $proxies = explode("\n", file_get_contents($proxyFile));
         unlink($proxyFile);

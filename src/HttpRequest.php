@@ -58,7 +58,7 @@ class Proxy {
         $working = 0;
 
         $ret = array_filter($ret, function($p) use (&$working) {
-            if($working > 20) {
+            if($working > 14) {
                 return false;
             }
             
@@ -204,7 +204,10 @@ class Proxy {
     {
         $request = new HttpRequest('SITE', [], null, $this);
         try {
-            $html = $request->doRequestInternal();
+            $html = $request->doRequestInternal()['data'];
+            if(stripos($html, 'E-Hentai Galleries') === false ) {
+                throw new Exception("Not proxying");
+            }
             return true;
         }
         catch(Exception $e) {
@@ -230,7 +233,7 @@ class HttpRequest {
 
     protected function getCacheKey()
     {
-        return '2-eht-http-cache-'.md5($this->urlAdd.'-'.$this->method.'-'.json_encode($this->arguments));
+        return 'eht-http-cache-'.md5($this->urlAdd.'-'.$this->method.'-'.json_encode($this->arguments));
     }
 
     public function __construct($method, $arguments, $urlAdd = null, $proxy = [])
@@ -267,6 +270,8 @@ class HttpRequest {
             if($this->arguments) {
                 $this->url .= '?' . http_build_query($this->arguments);
             }
+
+            //error_log("url:" . $this->url);
         }
         else {
             throw new \Exception("Unsupported method: " . $this->method);
@@ -291,7 +296,7 @@ class HttpRequest {
 
         curl_setopt($this->handle, CURLOPT_USERAGENT, HTTP_USER_AGENT);
         curl_setopt($this->handle, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($this->handle, CURLOPT_TIMEOUT, 2);
+        curl_setopt($this->handle, CURLOPT_TIMEOUT, 3);
 
         if(is_array($this->proxy)) {
             curl_setopt_array($this->handle, $this->proxy);

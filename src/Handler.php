@@ -256,7 +256,7 @@ class Handler {
         
         $rect = [
             'width'     => $this->getParam('width')-1,
-            'height'    => $this->getParam('height'),
+            'height'    => $this->getParam('height')-1,
             'x'         => $this->getParam('x'),
             'y'         => 0
         ];

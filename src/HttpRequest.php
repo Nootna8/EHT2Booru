@@ -230,10 +230,20 @@ class HttpRequest {
         }
 
         if($this->method == 'API') {
-            $this->url = 'http://api.e-hentai.org/api.php'; 
+            $apiBase = getenv('E_API_BASE');
+            if(!$apiBase) {
+                $apiBase = 'http://api.e-hentai.org/api.php';
+            }
+            
+            $this->url = $apiBase; 
         }
         else if($this->method == 'SITE') {
-            $this->url = 'http://e-hentai.org/' . $this->urlAdd;
+            $siteBase = getenv('E_SITE_BASE');
+            if(!$siteBase) {
+                $siteBase = 'http://e-hentai.org/';
+            }
+
+            $this->url = $siteBase . $this->urlAdd;
 
             if($this->arguments) {
                 $this->url .= '?' . http_build_query($this->arguments);

@@ -36,7 +36,7 @@ class Proxy {
         }
         $domain = parse_url($siteBase, PHP_URL_HOST);
         
-        exec("cd $proxyScraper && python3 $proxyScraper/proxyScraper.py -p https -o $proxyFile");
+        exec("cd $proxyScraper && python3 $proxyScraper/proxyScraper.py -p http -o $proxyFile");
         exec("cd $proxyScraper && python3 $proxyScraper/proxyChecker.py -l $proxyFile -s $domain -t 3");
         
         $proxies = explode("\n", file_get_contents($proxyFile));
@@ -44,6 +44,8 @@ class Proxy {
         
         $proxies = array_filter($proxies);
         $proxies = array_values($proxies);
+
+        error_log("Testing " . count($proxies) . " for " . $domain);
 
         $ret = array_map(function($p) {
             list($ip, $port) = explode(':', $p);

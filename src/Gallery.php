@@ -308,11 +308,16 @@ class Gallery {
         ];
 
         if($asImage) {
+            $siteBase = getenv('E_SITE_BASE');
+            if(!$siteBase) {
+                $siteBase = 'http://e-hentai.org/';
+            }
+            
             $data['title'] = $this->galleryData->title;
             $data['id'] = $this->getId();
             $data['file_url'] = getenv('BASE_URL') . '/gallery/banner?id=' . $this->getId(':');
             $data['preview_url'] = $this->galleryData->thumbUrl;
-            $data['source'] = 'https://e-hentai.org/g/' . $this->galleryData->gid . '/' . $this->galleryData->token . '/';
+            $data['source'] = $siteBase . 'g/' . $this->galleryData->gid . '/' . $this->galleryData->token . '/';
             $data['has_children'] = true;
 
             $data['tags'] = implode(' ', $this->getTags());

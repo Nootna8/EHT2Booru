@@ -8,3 +8,5 @@ services:
       - "80:80"
     environment:
       - BASE_URL=https://80-nootna8-eht2booru-p72kla5e3ts.ws-eu81.gitpod.io
+      #- E_API_BASE=http://exhentai.org/api.php
+      #- E_SITE_BASE=http://exhentai.org/

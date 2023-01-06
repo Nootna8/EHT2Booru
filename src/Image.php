@@ -114,11 +114,16 @@ class Image {
         if(getCookieJar())
             $this->load();
 
+        $siteBase = getenv('E_SITE_BASE');
+        if(!$siteBase) {
+            $siteBase = 'http://e-hentai.org/';
+        }
+
         $ret = [
             'id'            => $this->getId(),
             'tags'          => implode(' ', $this->getTags()),
             'status'        => 'active',
-            'source'        => 'https://e-hentai.org/s/' . $this->imageToken . '/' . $this->gallery->getGalleryId() . '-' . $this->pageNr,
+            'source'        => $siteBase . 's/' . $this->imageToken . '/' . $this->gallery->getGalleryId() . '-' . $this->pageNr,
         ] + $this->gallery->getPostData();
 
         $normalFileUrl = getenv('BASE_URL') . '/image/main?id=' . $this->getId(':');

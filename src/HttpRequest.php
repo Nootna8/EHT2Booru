@@ -55,8 +55,19 @@ class Proxy {
             ]);
         }, $proxies);
 
-        $ret = array_filter($ret, function($p) {
-            return $p->testEht();
+        $working = 0;
+
+        $ret = array_filter($ret, function($p) use (&$working) {
+            if($working > 20) {
+                return false;
+            }
+            
+            if(!$p->testEht()) {
+                return false;
+            }
+
+            $working ++;
+            return true;
         });
 
         Proxy::storeNew($ret);
@@ -280,7 +291,7 @@ class HttpRequest {
 
         curl_setopt($this->handle, CURLOPT_USERAGENT, HTTP_USER_AGENT);
         curl_setopt($this->handle, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($this->handle, CURLOPT_TIMEOUT, 3);
+        curl_setopt($this->handle, CURLOPT_TIMEOUT, 2);
 
         if(is_array($this->proxy)) {
             curl_setopt_array($this->handle, $this->proxy);
